@@ -1,0 +1,80 @@
+# docker-compose.yml — Ziriuz v2 Local Development Stack
+# Inicia MySQL, Redis, Adminer (DB browser) y Mailpit (email catcher)
+# Usage: docker compose up -d
+#
+# Puertos usados (no conflictúan con servicios del sistema):
+#   MySQL   → localhost:3307
+#   Redis   → localhost:6380
+#   Adminer → http://localhost:8080
+#   Mailpit → http://localhost:8025  (SMTP en localhost:1025)
+
+services:
+  # ── Base de datos MySQL ───────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: ziriuz_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ziriuz_root
+      MYSQL_DATABASE: ziriuz
+      MYSQL_USER: ziriuz
+      MYSQL_PASSWORD: ziriuz_dev
+    ports:
+      - "3307:3306"
+    volumes:
+      - ziriuz_mysql_data:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "ziriuz", "-pziriuz_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ziriuz_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - ziriuz_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Adminer: browser visual de la BD ──────────────────────────────────────
+  adminer:
+    image: adminer:latest
+    container_name: ziriuz_adminer
+    ports:
+      - "8181:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+      ADMINER_DESIGN: dracula
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Mailpit: captura de emails local ──────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ziriuz_mailpit
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_UI_AUTH_FILE: ""
+    restart: unless-stopped
+
+volumes:
+  ziriuz_mysql_data:
+  ziriuz_redis_data:

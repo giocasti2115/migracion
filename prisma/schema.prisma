@@ -1,0 +1,668 @@
+// Prisma schema — Ziriuz v2
+// Maps to the existing MySQL database (ziriuzco_ziriuz) plus new additive tables.
+// IMPORTANT: Migrations are additive only — existing tables/columns are never dropped or altered.
+//
+// Naming convention:
+//   - Model names: PascalCase (Prisma convention)
+//   - Field names: camelCase
+//   - @@map: original snake_case table name in MySQL
+//   - @map: original snake_case column name in MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USUARIOS Y AUTENTICACIÓN
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Usuario {
+  id         Int      @id @default(autoincrement())
+  usuario    String   @unique
+  nombre     String
+  cedula     String?
+  correo     String?
+  telefonos  String?
+  clave      String
+  activo     Boolean  @default(true)
+
+  administrador   Administrador?
+  analista        Analista?
+  tecnico         Tecnico?
+  coordinador     Coordinador?
+  comercial       Comercial?
+  sesiones        Sesion[]
+  refreshTokens   RefreshToken[]
+  vsClientes      UsuarioVsCliente[]
+  vsSedes         UsuarioVsSede[]
+  permisosEsp     PermisoEspecial[]
+  solicitudesCreadas  Solicitud[]      @relation("SolicitudCreador")
+  ordenesCreadas      Orden[]          @relation("OrdenCreador")
+  ordenesCerradas     Orden[]          @relation("OrdenCerrador")
+  visitasEjecutadas   Visita[]
+  ordenCambios        OrdenCambio[]
+  cotizacionesCreadas Cotizacion[]     @relation("CotizacionCreador")
+  cotizacionesCambiadas Cotizacion[]   @relation("CotizacionCambiador")
+
+  @@map("usuarios")
+}
+
+/// Sesiones de autenticación (tabla existente + columnas nuevas aditivas)
+model Sesion {
+  id        Int      @id @default(autoincrement())
+  idUsuario Int      @map("id_usuario")
+  creacion  DateTime @default(now())
+  /// Columna nueva (aditiva) — indica si la sesión está activa
+  activa    Boolean  @default(true)
+  /// Columna nueva (aditiva) — latitud desde login
+  lat       Float?
+  /// Columna nueva (aditiva) — longitud desde login
+  lng       Float?
+
+  usuario       Usuario        @relation(fields: [idUsuario], references: [id])
+  refreshTokens RefreshToken[]
+
+  @@map("sesiones")
+}
+
+/// Refresh tokens — tabla NUEVA (no existe en el legacy)
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  idUsuario Int      @map("id_usuario")
+  idSesion  Int      @map("id_sesion")
+  expiresAt DateTime @map("expires_at")
+  revocado  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+  sesion  Sesion  @relation(fields: [idSesion], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+// Roles — tablas de un campo booleano que indica el rol del usuario
+model Administrador {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @unique @map("id_usuario")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+
+  @@map("administradores")
+}
+
+model Analista {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @unique @map("id_usuario")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+
+  @@map("analistas")
+}
+
+model Tecnico {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @unique @map("id_usuario")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+
+  @@map("tecnicos")
+}
+
+model Coordinador {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @unique @map("id_usuario")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+
+  @@map("coordinadores")
+}
+
+model Comercial {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @unique @map("id_usuario")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+
+  @@map("comerciales")
+}
+
+/// Permisos especiales por usuario (ids_paginas: lista separada por comas del PHP legacy)
+model PermisoEspecial {
+  id         Int     @id @default(autoincrement())
+  idUsuario  Int     @map("id_usuario")
+  idsPaginas String  @map("ids_paginas") @db.Text
+  activo     Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+
+  @@map("permisos_especiales")
+}
+
+model UsuarioVsSede {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @map("id_usuario")
+  idSede    Int     @map("id_sede")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+  sede    Sede    @relation(fields: [idSede], references: [id])
+
+  @@map("usuarios_vs_sedes")
+}
+
+model UsuarioVsCliente {
+  id        Int     @id @default(autoincrement())
+  idUsuario Int     @map("id_usuario")
+  idCliente Int     @map("id_cliente")
+  activo    Boolean @default(true)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id])
+  cliente Cliente @relation(fields: [idCliente], references: [id])
+
+  @@map("usuarios_vs_clientes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GEOGRAFÍA
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Departamentos de Colombia — existe en legacy; columna `codigo` es NUEVA (aditiva)
+model Departamento {
+  id     Int    @id @default(autoincrement())
+  nombre String
+  /// Columna nueva (aditiva) — código DANE para el mapa SVG (e.g. "05", "11")
+  codigo String? @unique
+
+  municipios Municipio[]
+
+  @@map("departamentos")
+}
+
+model Municipio {
+  id             Int    @id @default(autoincrement())
+  nombre         String
+  idDepartamento Int    @map("id_departamento")
+
+  departamento Departamento @relation(fields: [idDepartamento], references: [id])
+  sedes        Sede[]
+
+  @@map("municipios")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLIENTES, EMPRESAS Y SEDES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Empresa {
+  id       Int     @id @default(autoincrement())
+  nombre   String
+  nit      String?
+  direccion String?
+  pbx      String?
+  celular  String?
+  correo   String?
+  logoSvg  String? @map("logo_svg")
+  logoPng  String? @map("logo_png")
+  logoJpg  String? @map("logo_jpg")
+
+  clientes Cliente[]
+
+  @@map("empresas")
+}
+
+model Cliente {
+  id        Int     @id @default(autoincrement())
+  nombre    String
+  nit       String?
+  idEmpresa Int?    @map("id_empresa")
+  activo    Boolean @default(true)
+  correo    String?
+
+  empresa     Empresa?           @relation(fields: [idEmpresa], references: [id])
+  sedes       Sede[]
+  cotizaciones Cotizacion[]
+  vsUsuarios  UsuarioVsCliente[]
+
+  @@map("clientes")
+}
+
+model Sede {
+  id          Int     @id @default(autoincrement())
+  nombre      String
+  idCliente   Int     @map("id_cliente")
+  idMunicipio Int     @map("id_municipio")
+  direccion   String?
+  telefonos   String?
+  correo      String?
+  activo      Boolean @default(true)
+
+  cliente    Cliente   @relation(fields: [idCliente], references: [id])
+  municipio  Municipio @relation(fields: [idMunicipio], references: [id])
+  equipos    Equipo[]
+  vsUsuarios UsuarioVsSede[]
+
+  @@map("sedes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATÁLOGOS DE EQUIPOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Marca {
+  id    Int    @id @default(autoincrement())
+  marca String
+
+  modelos Modelo[]
+
+  @@map("marcas")
+}
+
+model Clase {
+  id            Int  @id @default(autoincrement())
+  clase         String
+  idPreventivo  Int? @map("id_preventivo")
+
+  modelos Modelo[]
+
+  @@map("clases")
+}
+
+model Modelo {
+  id           Int     @id @default(autoincrement())
+  modelo       String
+  idClase      Int     @map("id_clase")
+  idMarca      Int     @map("id_marca")
+  idPreventivo Int?    @map("id_preventivo")
+  activo       Boolean @default(true)
+
+  clase   Clase  @relation(fields: [idClase], references: [id])
+  marca   Marca  @relation(fields: [idMarca], references: [id])
+  equipos Equipo[]
+
+  @@map("modelos")
+}
+
+model Area {
+  id   Int    @id @default(autoincrement())
+  area String
+
+  equipos Equipo[]
+
+  @@map("areas")
+}
+
+model Tipo {
+  id   Int    @id @default(autoincrement())
+  tipo String
+
+  equipos Equipo[]
+
+  @@map("tipos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EQUIPOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Equipo {
+  id          Int     @id @default(autoincrement())
+  idModelo    Int     @map("id_modelo")
+  idArea      Int?    @map("id_area")
+  idTipo      Int?    @map("id_tipo")
+  idSede      Int     @map("id_sede")
+  serie       String?
+  activoFijo  String? @map("activo_fijo")
+  ubicacion   String?
+  activo      Boolean @default(true)
+  mtto        Boolean @default(false)
+
+  modelo     Modelo @relation(fields: [idModelo], references: [id])
+  area       Area?  @relation(fields: [idArea], references: [id])
+  tipo       Tipo?  @relation(fields: [idTipo], references: [id])
+  sede       Sede   @relation(fields: [idSede], references: [id])
+  solicitudes Solicitud[]
+
+  @@map("equipos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATÁLOGOS DE FALLAS Y SERVICIOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Servicio {
+  id       Int    @id @default(autoincrement())
+  servicio String
+
+  solicitudes Solicitud[]
+
+  @@map("servicios")
+}
+
+model FallaModo {
+  id     Int    @id @default(autoincrement())
+  titulo String
+
+  @@map("fallas_modos")
+}
+
+model FallaCausa {
+  id     Int    @id @default(autoincrement())
+  titulo String
+
+  @@map("fallas_causas")
+}
+
+model FallaAccion {
+  id     Int    @id @default(autoincrement())
+  titulo String
+
+  ordenes Orden[]
+
+  @@map("fallas_acciones")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOLICITUDES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SolicitudEstado {
+  id     Int    @id @default(autoincrement())
+  estado String
+
+  solicitudes Solicitud[]
+
+  @@map("solicitudes_estados")
+}
+
+model Solicitud {
+  id                Int      @id @default(autoincrement())
+  idEquipo          Int      @map("id_equipo")
+  idServicio        Int      @map("id_servicio")
+  idCreador         Int      @map("id_creador")
+  idEstado          Int      @map("id_estado")
+  aviso             String?
+  observacion       String?  @db.Text
+  observacionEstado String?  @map("observacion_estado") @db.Text
+  creacion          DateTime @default(now())
+
+  equipo   Equipo          @relation(fields: [idEquipo], references: [id])
+  servicio Servicio        @relation(fields: [idServicio], references: [id])
+  creador  Usuario         @relation("SolicitudCreador", fields: [idCreador], references: [id])
+  estado   SolicitudEstado @relation(fields: [idEstado], references: [id])
+  ordenes  Orden[]
+
+  @@map("solicitudes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ÓRDENES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OrdenEstado {
+  id     Int    @id @default(autoincrement())
+  estado String
+
+  ordenes Orden[]
+
+  @@map("ordenes_estados")
+}
+
+model OrdenSubEstado {
+  id        Int    @id @default(autoincrement())
+  subEstado String @map("sub_estado")
+
+  cambios OrdenCambio[]
+
+  @@map("ordenes_sub_estados")
+}
+
+model Orden {
+  id                Int       @id @default(autoincrement())
+  idSolicitud       Int       @map("id_solicitud")
+  idEstado          Int       @map("id_estado")
+  idCreador         Int       @map("id_creador")
+  idCerrador        Int?      @map("id_cerrador")
+  creacion          DateTime  @default(now())
+  cierre            DateTime?
+  total             Decimal?  @db.Decimal(10, 2)
+  nombreRecibe      String?   @map("nombre_recibe")
+  cedulaRecibe      String?   @map("cedula_recibe")
+  entregaId         String?   @map("entrega_id")
+  solicitarDadoBaja Boolean   @default(false) @map("solicitar_dado_baja")
+  idsFallaModos     String?   @map("ids_falla_modos")
+  idAccionesFalla   Int?      @map("id_acciones_falla")
+  /// Columna nueva (aditiva) — observaciones al cerrar la orden
+  observacionesCierre String? @map("observaciones_cierre") @db.Text
+
+  solicitud    Solicitud   @relation(fields: [idSolicitud], references: [id])
+  estado       OrdenEstado @relation(fields: [idEstado], references: [id])
+  creador      Usuario     @relation("OrdenCreador", fields: [idCreador], references: [id])
+  cerrador     Usuario?    @relation("OrdenCerrador", fields: [idCerrador], references: [id])
+  accionFalla  FallaAccion? @relation(fields: [idAccionesFalla], references: [id])
+  visitas      Visita[]
+  cambios      OrdenCambio[]
+  adjuntos     OrdenAdjunto[]
+  cotizaciones Cotizacion[]
+
+  @@map("ordenes")
+}
+
+model OrdenCambio {
+  id          Int      @id @default(autoincrement())
+  idOrden     Int      @map("id_orden")
+  idSubEstado Int      @map("id_sub_estado")
+  idCreador   Int      @map("id_creador")
+  comentario  String?  @db.Text
+  fecha       DateTime @default(now())
+
+  orden     Orden          @relation(fields: [idOrden], references: [id])
+  subEstado OrdenSubEstado @relation(fields: [idSubEstado], references: [id])
+  creador   Usuario        @relation(fields: [idCreador], references: [id])
+
+  @@map("ordenes_cambios")
+}
+
+model OrdenAdjunto {
+  id      Int     @id @default(autoincrement())
+  idOrden Int     @map("id_orden")
+  nombre  String
+  activo  Boolean @default(true)
+
+  orden Orden @relation(fields: [idOrden], references: [id])
+
+  @@map("ordenes_adjuntos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISITAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VisitaEstado {
+  id     Int    @id @default(autoincrement())
+  estado String
+
+  visitas Visita[]
+
+  @@map("visitas_estados")
+}
+
+model Visita {
+  id           Int       @id @default(autoincrement())
+  idOrden      Int       @map("id_orden")
+  idEstado     Int       @map("id_estado")
+  idEjecutador Int?      @map("id_ejecutador")
+  actividades  String?   @db.Text  // comma-separated list of protocolo ids (legacy)
+  fechaInicio  DateTime? @map("fecha_inicio")
+  fechaCierre  DateTime? @map("fecha_cierre")
+  duracion     Int?      // minutes
+  activo       Boolean   @default(true)
+  /// Columna nueva (aditiva) — fecha programada para la vista de calendario
+  fechaProgramada DateTime? @map("fecha_programada")
+  /// Columna nueva (aditiva) — observaciones de cierre (máx 1000 chars)
+  observacionesCierre String? @map("observaciones_cierre") @db.Text
+  /// Columna nueva (aditiva) — motivo de rechazo (máx 500 chars)
+  motivoRechazo String? @map("motivo_rechazo") @db.VarChar(500)
+
+  orden      Orden        @relation(fields: [idOrden], references: [id])
+  estado     VisitaEstado @relation(fields: [idEstado], references: [id])
+  ejecutador Usuario?     @relation(fields: [idEjecutador], references: [id])
+  actividadesEjecutadas Actividad[]
+
+  @@map("visitas")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVIDADES Y PROTOCOLOS (mantenimiento preventivo)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Protocolo {
+  id    Int    @id @default(autoincrement())
+  title String
+
+  actividades Actividad[]
+
+  @@map("protocolos")
+}
+
+model Actividad {
+  id          Int       @id @default(autoincrement())
+  idVisita    Int       @map("id_visita")
+  idProtocolo Int       @map("id_protocolo")
+  fecha       DateTime  @default(now())
+  activo      Boolean   @default(true)
+
+  visita    Visita    @relation(fields: [idVisita], references: [id])
+  protocolo Protocolo @relation(fields: [idProtocolo], references: [id])
+  resultados Resultado[]
+
+  @@map("actividades")
+}
+
+model Campo {
+  id Int @id @default(autoincrement())
+  // other columns exist in legacy but aren't needed for Prisma queries yet
+
+  resultados Resultado[]
+
+  @@map("campos")
+}
+
+model Resultado {
+  id          Int    @id @default(autoincrement())
+  idActividad Int    @map("id_actividad")
+  idCampo     Int    @map("id_campo")
+  resultado   String @db.Text
+
+  actividad Actividad @relation(fields: [idActividad], references: [id])
+  campo     Campo     @relation(fields: [idCampo], references: [id])
+
+  @@map("resultados")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PREVENTIVOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Preventive maintenance plans — stored as serialized field lists in legacy
+model Preventivo {
+  id            Int     @id @default(autoincrement())
+  title         String
+  version       String?
+  activo        Boolean @default(true)
+  /// Comma-separated campo ids for qualitative fields (legacy format)
+  cualitativo   String? @db.Text
+  /// Comma-separated campo ids for maintenance fields (legacy format)
+  mantenimiento String? @db.Text
+  /// Pipe-separated cuantitative field specs: id_min_max_unit (legacy format)
+  cuantitativo  String? @db.Text
+  /// Comma-separated campo ids for other fields (legacy format)
+  otros         String? @db.Text
+  /// Columna nueva (aditiva) — equipo asociado al preventivo
+  idEquipo      Int?    @map("id_equipo")
+  /// Columna nueva (aditiva) — fecha programada de ejecución
+  fechaProgramada DateTime? @map("fecha_programada")
+
+  @@map("preventivos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COTIZACIONES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CotizacionEstado {
+  id     Int    @id @default(autoincrement())
+  estado String
+
+  cotizaciones Cotizacion[]
+
+  @@map("cotizaciones_estados")
+}
+
+model Cotizacion {
+  id                Int       @id @default(autoincrement())
+  idCliente         Int       @map("id_cliente")
+  idCreador         Int       @map("id_creador")
+  idCambiador       Int?      @map("id_cambiador")
+  idEstado          Int       @map("id_estado")
+  idOrden           Int?      @map("id_orden")
+  mensaje           String?   @db.Text
+  condiciones       String?   @db.Text
+  observacionEstado String?   @map("observacion_estado") @db.Text
+  cambioEstado      DateTime? @map("cambio_estado")
+  creacion          DateTime  @default(now())
+
+  cliente    Cliente          @relation(fields: [idCliente], references: [id])
+  creador    Usuario          @relation("CotizacionCreador", fields: [idCreador], references: [id])
+  cambiador  Usuario?         @relation("CotizacionCambiador", fields: [idCambiador], references: [id])
+  estado     CotizacionEstado @relation(fields: [idEstado], references: [id])
+  orden      Orden?           @relation(fields: [idOrden], references: [id])
+  repuestos  CotizacionRepuesto[]
+  itemsAdicionales CotizacionItemAdicional[]
+
+  @@map("cotizaciones")
+}
+
+model Repuesto {
+  id     Int    @id @default(autoincrement())
+  nombre String
+
+  cotizacionRepuestos CotizacionRepuesto[]
+
+  @@map("repuestos")
+}
+
+model CotizacionRepuesto {
+  id           Int     @id @default(autoincrement())
+  idCotizacion Int     @map("id_cotizacion")
+  idRepuesto   Int     @map("id_repuesto")
+  cantidad     Int
+  valor        Decimal @db.Decimal(12, 2)
+
+  cotizacion Cotizacion @relation(fields: [idCotizacion], references: [id])
+  repuesto   Repuesto   @relation(fields: [idRepuesto], references: [id])
+
+  @@map("cotizaciones_repuestos")
+}
+
+model CotizacionItemAdicional {
+  id           Int     @id @default(autoincrement())
+  idCotizacion Int     @map("id_cotizacion")
+  descripcion  String  @db.Text
+  cantidad     Int
+  valor        Decimal @db.Decimal(12, 2)
+
+  cotizacion Cotizacion @relation(fields: [idCotizacion], references: [id])
+
+  @@map("cotizaciones_items_adicionales")
+}
