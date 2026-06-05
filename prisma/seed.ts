@@ -248,7 +248,7 @@ async function main() {
       where: { idUsuario_idSede: { idUsuario: user.id, idSede: sede.id } },
       update: {},
       create: { idUsuario: user.id, idSede: sede.id },
-    }).catch(() => {})
+    })
 
     console.log(`  ✓ Usuario ${u.usuario} (${u.rol})`)
   }

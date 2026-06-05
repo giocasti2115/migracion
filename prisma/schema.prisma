@@ -158,6 +158,7 @@ model UsuarioVsSede {
   usuario Usuario @relation(fields: [idUsuario], references: [id])
   sede    Sede    @relation(fields: [idSede], references: [id])
 
+  @@unique([idUsuario, idSede])
   @@map("usuarios_vs_sedes")
 }
 
@@ -170,6 +171,7 @@ model UsuarioVsCliente {
   usuario Usuario @relation(fields: [idUsuario], references: [id])
   cliente Cliente @relation(fields: [idCliente], references: [id])
 
+  @@unique([idUsuario, idCliente])
   @@map("usuarios_vs_clientes")
 }
 
