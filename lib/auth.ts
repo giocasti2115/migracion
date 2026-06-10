@@ -97,6 +97,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: { strategy: "jwt", maxAge: 15 * 60 }, // 15 minutes
   pages: { signIn: "/login" },
+  trustHost: true,
 })
 
 // Re-export handlers for the [...nextauth] route
