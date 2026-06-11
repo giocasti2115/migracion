@@ -40,5 +40,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Prisma - migrations must be committed for deploy
-# prisma/migrations/
+# Prisma - migrations are committed for deploy

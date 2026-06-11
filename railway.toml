@@ -1,0 +1,6 @@
+[build]
+  builder = "nixpacks"
+  buildCommand = "npm run build"
+
+[deploy]
+  startCommand = "bash scripts/start-production.sh"
