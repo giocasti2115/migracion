@@ -10,10 +10,22 @@ function normalizePem(pem: string): string {
   return pem.replace(/\\n/g, "\n")
 }
 
+/**
+ * Ensure the private key is PKCS#8 (jose's importPKCS8 requires it).
+ * Accepts both PKCS#1 (-----BEGIN RSA PRIVATE KEY-----) and proper PKCS#8.
+ * Only called from server runtime (jwt.encode), never from Edge.
+ */
+function normalizePrivateKeyPem(raw: string): string {
+  const pem = normalizePem(raw)
+  if (!pem.includes("BEGIN RSA PRIVATE KEY")) return pem
+  const { createPrivateKey } = require("crypto") as typeof import("crypto")
+  return createPrivateKey(pem).export({ type: "pkcs8", format: "pem" }) as string
+}
+
 async function getPrivateKey() {
   const key = process.env.AUTH_PRIVATE_KEY
   if (!key) throw new Error("AUTH_PRIVATE_KEY environment variable is not set")
-  return await importPKCS8(normalizePem(key), "RS256")
+  return await importPKCS8(normalizePrivateKeyPem(key), "RS256")
 }
 
 async function getPublicKey() {
