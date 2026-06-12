@@ -84,12 +84,16 @@ export async function revocarAccessTokenJti(jti: string): Promise<void> {
   }
 }
 
+export function getFallbackKey(): Uint8Array {
+  const secret = process.env.AUTH_SECRET
+  if (!secret) throw new Error("AUTH_SECRET is not set")
+  return new TextEncoder().encode(secret)
+}
+
 export async function signFallbackToken(
   payload: Record<string, unknown>
 ): Promise<string> {
-  const secret = process.env.AUTH_SECRET
-  if (!secret) throw new Error("AUTH_SECRET is not set")
-  const key = new TextEncoder().encode(secret)
+  const key = getFallbackKey()
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -101,9 +105,7 @@ export async function verifyFallbackToken(
   token: string
 ): Promise<Record<string, unknown> | null> {
   try {
-    const secret = process.env.AUTH_SECRET
-    if (!secret) return null
-    const key = new TextEncoder().encode(secret)
+    const key = getFallbackKey()
     const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] })
     return payload as Record<string, unknown>
   } catch {

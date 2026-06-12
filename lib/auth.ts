@@ -37,26 +37,12 @@ const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
   jwt: {
     async encode({ token }) {
       if (!token) return ""
-      try {
-        return await signAccessToken(token)
-      } catch (error) {
-        console.error("[auth] RS256 signing failed, using HS256 fallback:", error)
-        return signFallbackToken(token)
-      }
+      return signFallbackToken(token)
     },
     async decode({ token }) {
       if (!token) return null
-      try {
-        const payload = await verifyAccessToken(token)
-        return payload as Record<string, unknown> | null
-      } catch {
-        try {
-          const payload = await verifyFallbackToken(token)
-          return payload as Record<string, unknown> | null
-        } catch {
-          return null
-        }
-      }
+      const payload = await verifyFallbackToken(token)
+      return payload
     },
   },
   providers: [
