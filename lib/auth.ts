@@ -34,17 +34,24 @@ function determinarRol(usuario: {
 }
 
 const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
-  jwt: {
-    async encode({ token }) {
-      if (!token) return ""
-      return signFallbackToken(token)
-    },
-    async decode({ token }) {
-      if (!token) return null
-      const payload = await verifyFallbackToken(token)
-      return payload
-    },
-  },
+  // jwt: {
+  //   async encode({ token }) {
+  //     if (!token) return ""
+  //     try {
+  //       const result = await signFallbackToken(token)
+  //       console.log("[auth] JWT encode SUCCESS, length:", result.length)
+  //       return result
+  //     } catch (error) {
+  //       console.error("[auth] JWT encode FAILED:", error?.message, error?.stack)
+  //       throw error
+  //     }
+  //   },
+  //   async decode({ token }) {
+  //     if (!token) return null
+  //     const payload = await verifyFallbackToken(token)
+  //     return payload
+  //   },
+  // },
   providers: [
     Credentials({
       credentials: {
