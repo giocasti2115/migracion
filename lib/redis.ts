@@ -11,6 +11,12 @@ async function createRedisClient(): Promise<RedisType> {
     enableReadyCheck: true,
     lazyConnect: true,
   })
+
+  // Prevent unhandled error events (e.g., ECONNREFUSED when no Redis is running).
+  // The .catch on the promise is not enough because ioredis emits an 'error'
+  // event on the client instance which crashes the process if unhandled.
+  client.on("error", () => {})
+
   if (process.env.NODE_ENV !== "production") {
     globalForRedis.redis = client
   }
