@@ -34,24 +34,32 @@ function determinarRol(usuario: {
 }
 
 const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
-  // jwt: {
-  //   async encode({ token }) {
-  //     if (!token) return ""
-  //     try {
-  //       const result = await signFallbackToken(token)
-  //       console.log("[auth] JWT encode SUCCESS, length:", result.length)
-  //       return result
-  //     } catch (error) {
-  //       console.error("[auth] JWT encode FAILED:", error?.message, error?.stack)
-  //       throw error
-  //     }
-  //   },
-  //   async decode({ token }) {
-  //     if (!token) return null
-  //     const payload = await verifyFallbackToken(token)
-  //     return payload
-  //   },
-//   },
+  jwt: {
+    async encode({ token }) {
+      if (!token) return ""
+      try {
+        return await signAccessToken(token)
+      } catch (error) {
+        console.error("[auth] RS256 failed, using HS256 fallback:", error)
+        return signFallbackToken(token)
+      }
+    },
+    async decode({ token }) {
+      if (!token) return null
+      try {
+        const payload = await verifyAccessToken(token)
+        if (payload) return payload as Record<string, unknown> | null
+      } catch {
+        // RS256 failed, try HS256
+      }
+      try {
+        const payload = await verifyFallbackToken(token)
+        return payload as Record<string, unknown> | null
+      } catch {
+        return null
+      }
+    },
+  },
   providers: [
     Credentials({
       credentials: {
@@ -79,11 +87,11 @@ const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
         const passwordOk = await compare(parsed.data.clave, usuario.clave)
         if (!passwordOk) return null
 
+        // Requirement 1.1 — revoke all previous sessions before creating a new one
         try {
-          // Requirement 1.1 — revoke all previous sessions before creating a new one
           await revocarSesionesAnteriores(usuario.id)
-        } catch (e) {
-          console.error("[auth] revocarSesionesAnteriores failed:", e)
+        } catch (error) {
+          console.error("[auth] revocarSesionesAnteriores failed:", error)
         }
 
         const lat =
