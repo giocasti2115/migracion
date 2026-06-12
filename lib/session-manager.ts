@@ -1,4 +1,5 @@
 import { prisma } from "./prisma"
+import { getRedis } from "./redis"
 import { revocarRefreshTokensPorSesion, revocarTodosRefreshTokens } from "./auth-tokens"
 
 /**
@@ -24,6 +25,17 @@ export async function revocarSesionesAnteriores(idUsuario: number): Promise<void
   // Revoke all refresh tokens for the user first
   await revocarTodosRefreshTokens(idUsuario)
 
+  // Cache revoked sessions in Redis for access token invalidation
+  const previousSessions = await prisma.sesion.findMany({
+    where: { idUsuario, activa: true },
+  })
+  const r = await getRedis()
+  if (r) {
+    for (const sesion of previousSessions) {
+      await r.set(`revoked-session:${sesion.id}`, "1", "EX", 86400)
+    }
+  }
+
   // Mark all active sessions as inactive
   await prisma.sesion.updateMany({
     where: { idUsuario, activa: true },
@@ -41,6 +53,10 @@ export async function revocarSesion(idSesion: number): Promise<void> {
     where: { id: idSesion },
     data: { activa: false },
   })
+  const r = await getRedis()
+  if (r) {
+    await r.set(`revoked-session:${idSesion}`, "1", "EX", 86400)
+  }
 }
 
 /**

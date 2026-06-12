@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getSedesRelacionadas } from "@/lib/data-scope-filter"
 import { informeCorrectivosSchema } from "@/lib/validations/informes"
+import { generateExcelBlob } from "@/lib/export/excel-server"
 import { NextRequest, NextResponse } from "next/server"
 
 /**
@@ -99,6 +100,27 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { creacion: "desc" },
   })
+
+  if (searchParams.get("format") === "xlsx") {
+    const rows = ordenes.map((o) => ({
+      ID: o.id,
+      Estado: o.estado.estado,
+      "Fecha creación": o.creacion.toISOString().split("T")[0],
+      "Fecha cierre": o.cierre?.toISOString().split("T")[0] ?? "",
+      Cliente: o.solicitud.equipo.sede.cliente.nombre,
+      Sede: o.solicitud.equipo.sede.nombre,
+      Equipo: `${o.solicitud.equipo.modelo.marca.marca} ${o.solicitud.equipo.modelo.modelo}`,
+      Servicio: o.solicitud.servicio?.servicio ?? "",
+      Técnico: o.visitas[0]?.ejecutador?.nombre ?? "",
+    }))
+    const blob = generateExcelBlob({ name: "Correctivos", data: rows })
+    return new NextResponse(blob, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="correctivos.xlsx"`,
+      },
+    })
+  }
 
   return NextResponse.json({ total: ordenes.length, items: ordenes })
 }

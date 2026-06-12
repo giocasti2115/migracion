@@ -4,6 +4,7 @@ import { compare } from "bcryptjs"
 import { prisma } from "./prisma"
 import { loginSchema } from "./validations/auth"
 import { crearSesion, revocarSesionesAnteriores } from "./session-manager"
+import { signAccessToken, verifyAccessToken } from "./auth-tokens"
 
 export type Rol =
   | "administrador"
@@ -28,6 +29,17 @@ function determinarRol(usuario: {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  jwt: {
+    async encode({ token }) {
+      if (!token) return ""
+      return signAccessToken(token)
+    },
+    async decode({ token }) {
+      if (!token) return null
+      const payload = await verifyAccessToken(token)
+      return payload as Record<string, unknown> | null
+    },
+  },
   providers: [
     Credentials({
       credentials: {

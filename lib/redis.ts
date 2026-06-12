@@ -1,19 +1,28 @@
-import Redis from "ioredis"
+import type RedisType from "ioredis"
 
-/**
- * Singleton ioredis client.
- * Reuses the connection across hot-reloads in development.
- */
-const globalForRedis = globalThis as unknown as { redis: Redis | undefined }
+const globalForRedis = globalThis as unknown as { redis: RedisType | undefined }
 
-export const redis: Redis =
-  globalForRedis.redis ??
-  new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+const IS_EDGE = process.env.NEXT_RUNTIME === "edge"
+
+async function createRedisClient(): Promise<RedisType> {
+  const { default: Redis } = await import("ioredis")
+  const client = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
     lazyConnect: true,
   })
+  if (process.env.NODE_ENV !== "production") {
+    globalForRedis.redis = client
+  }
+  return client
+}
 
-if (process.env.NODE_ENV !== "production") {
-  globalForRedis.redis = redis
+let redisPromise: Promise<RedisType> | null = null
+
+export function getRedis(): Promise<RedisType | null> {
+  if (IS_EDGE) return Promise.resolve(null)
+  if (!redisPromise) {
+    redisPromise = createRedisClient().catch(() => null as unknown as RedisType)
+  }
+  return redisPromise
 }

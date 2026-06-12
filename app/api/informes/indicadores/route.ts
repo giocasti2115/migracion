@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getSedesRelacionadas } from "@/lib/data-scope-filter"
 import { informeIndicadoresSchema } from "@/lib/validations/informes"
+import { generateExcelBlob } from "@/lib/export/excel-server"
 import { NextRequest, NextResponse } from "next/server"
 
 /**
@@ -115,7 +116,7 @@ export async function GET(req: NextRequest) {
     if (orden.cierre) desgloseMap[label].cerradas += 1
   }
 
-  return NextResponse.json({
+  const response = {
     totalOrdenes: ordenes.length,
     ordenesCerradas: ordenesCerradas.length,
     ordenesAbiertas: ordenes.length - ordenesCerradas.length,
@@ -123,5 +124,39 @@ export async function GET(req: NextRequest) {
     totalVisitas: visitas.length,
     visitasCerradas: visitas.filter((v) => v.estado.estado === "Cerrada").length,
     desglose: Object.values(desgloseMap).sort((a, b) => a.label.localeCompare(b.label)),
-  })
+  }
+
+  if (searchParams.get("format") === "xlsx") {
+    const blob = generateExcelBlob([
+      {
+        name: "KPIs",
+        data: [
+          { Indicador: "Total órdenes", Valor: response.totalOrdenes },
+          { Indicador: "Órdenes cerradas", Valor: response.ordenesCerradas },
+          { Indicador: "Órdenes abiertas", Valor: response.ordenesAbiertas },
+          { Indicador: "Promedio cierre (horas)", Valor: response.promedioTiempoCierreHoras ?? "" },
+          { Indicador: "Total visitas", Valor: response.totalVisitas },
+          { Indicador: "Visitas cerradas", Valor: response.visitasCerradas },
+        ],
+        headers: ["Indicador", "Valor"],
+      },
+      {
+        name: "Desglose",
+        data: response.desglose.map((d) => ({
+          Agrupación: d.label,
+          "Total órdenes": d.total,
+          Cerradas: d.cerradas,
+        })),
+        headers: ["Agrupación", "Total órdenes", "Cerradas"],
+      },
+    ])
+    return new NextResponse(blob, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="indicadores.xlsx"`,
+      },
+    })
+  }
+
+  return NextResponse.json(response)
 }

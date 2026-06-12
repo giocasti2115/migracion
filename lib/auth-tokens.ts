@@ -1,12 +1,77 @@
+import { SignJWT, jwtVerify, importPKCS8, importSPKI } from "jose"
 import { createId } from "@paralleldrive/cuid2"
 import { prisma } from "./prisma"
+import { getRedis } from "./redis"
 
 const REFRESH_TOKEN_TTL_DAYS = 7
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 
-/**
- * Creates a new refresh token for the given user/session, stores it in the DB
- * and returns the raw token string.
- */
+function normalizePem(pem: string): string {
+  return pem.replace(/\\n/g, "\n")
+}
+
+async function getPrivateKey() {
+  const key = process.env.AUTH_PRIVATE_KEY
+  if (!key) throw new Error("AUTH_PRIVATE_KEY environment variable is not set")
+  return await importPKCS8(normalizePem(key), "RS256")
+}
+
+async function getPublicKey() {
+  const key = process.env.AUTH_PUBLIC_KEY
+  if (!key) throw new Error("AUTH_PUBLIC_KEY environment variable is not set")
+  return await importSPKI(normalizePem(key), "RS256")
+}
+
+export async function signAccessToken(
+  payload: Record<string, unknown>
+): Promise<string> {
+  const jti = createId()
+  const privateKey = await getPrivateKey()
+
+  return await new SignJWT({ ...payload, jti })
+    .setProtectedHeader({ alg: "RS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setJti(jti)
+    .sign(privateKey)
+}
+
+export async function verifyAccessToken(
+  token: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const publicKey = await getPublicKey()
+    const { payload } = await jwtVerify(token, publicKey, {
+      algorithms: ["RS256"],
+    })
+
+    const jti = payload.jti as string
+    if (jti) {
+      const r = await getRedis()
+      const revoked = await r?.get(`revoked:${jti}`)
+      if (revoked) return null
+    }
+
+    const sessionId = payload.sessionId as number | undefined
+    if (sessionId) {
+      const r = await getRedis()
+      const sessionRevoked = await r?.get(`revoked-session:${sessionId}`)
+      if (sessionRevoked) return null
+    }
+
+    return payload as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+export async function revocarAccessTokenJti(jti: string): Promise<void> {
+  const r = await getRedis()
+  if (r) {
+    await r.set(`revoked:${jti}`, "1", "EX", ACCESS_TOKEN_TTL_SECONDS)
+  }
+}
+
 export async function signRefreshToken(
   idUsuario: number,
   idSesion: number
@@ -22,10 +87,6 @@ export async function signRefreshToken(
   return token
 }
 
-/**
- * Looks up a refresh token in the DB.
- * Returns the record if valid (not revoked, not expired), null otherwise.
- */
 export async function verifyRefreshToken(token: string) {
   const record = await prisma.refreshToken.findUnique({
     where: { token },
@@ -39,9 +100,6 @@ export async function verifyRefreshToken(token: string) {
   return record
 }
 
-/**
- * Marks a single refresh token as revoked.
- */
 export async function revocarRefreshToken(token: string): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { token, revocado: false },
@@ -49,10 +107,6 @@ export async function revocarRefreshToken(token: string): Promise<void> {
   })
 }
 
-/**
- * Revokes ALL active refresh tokens for a given user.
- * Called when a previous token is reused (token-reuse attack).
- */
 export async function revocarTodosRefreshTokens(idUsuario: number): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { idUsuario, revocado: false },
@@ -60,9 +114,6 @@ export async function revocarTodosRefreshTokens(idUsuario: number): Promise<void
   })
 }
 
-/**
- * Revokes all refresh tokens associated with a specific session.
- */
 export async function revocarRefreshTokensPorSesion(idSesion: number): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { idSesion, revocado: false },

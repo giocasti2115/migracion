@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getSedesRelacionadas } from "@/lib/data-scope-filter"
 import { informeRepuestosSchema } from "@/lib/validations/informes"
+import { generateExcelBlob } from "@/lib/export/excel-server"
 import { NextRequest, NextResponse } from "next/server"
 
 /**
@@ -88,6 +89,25 @@ export async function GET(req: NextRequest) {
     grouped[key].cantidad += item.cantidad
     grouped[key].valorTotal += Number(item.valor) * item.cantidad
     grouped[key].lineas += 1
+  }
+
+  if (searchParams.get("format") === "xlsx") {
+    const rows = items.map((item) => ({
+      ID: item.id,
+      Repuesto: item.repuesto.nombre,
+      Cantidad: item.cantidad,
+      "Valor unitario": Number(item.valor),
+      "Valor total": Number(item.valor) * item.cantidad,
+      Cliente: item.cotizacion.cliente?.nombre ?? "",
+      "Fecha cotización": item.cotizacion.creacion.toISOString().split("T")[0],
+    }))
+    const blob = generateExcelBlob({ name: "Repuestos", data: rows })
+    return new NextResponse(blob, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="repuestos.xlsx"`,
+      },
+    })
   }
 
   return NextResponse.json({

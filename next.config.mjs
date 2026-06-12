@@ -28,10 +28,15 @@ const nextConfig = {
   },
 
   // Webpack configuration for specific packages
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     // Required for @react-pdf/renderer
     config.resolve.alias.canvas = false
     config.resolve.alias.encoding = false
+
+    // ioredis uses Node.js built-ins (node:diagnostics_channel)
+    // that must not be bundled by webpack (applies to both server and edge)
+    config.externals.push("ioredis")
+
     return config
   },
 }

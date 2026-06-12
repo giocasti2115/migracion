@@ -6,7 +6,9 @@ import {
   ClipboardList,
   CalendarCheck,
   FileText,
+  AlertCircle,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { KPICard, KPICardSkeleton } from "@/components/dashboard/KPICard"
 import {
   OrdenesPorMesChart,
@@ -49,6 +51,20 @@ type ChartsData = {
 
 type MapaData = { codigoDane: string; departamento: string; total: number }[]
 
+function ErrorSection({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center rounded-md border border-dashed p-8 text-muted-foreground",
+        className
+      )}
+    >
+      <AlertCircle className="mr-2 h-4 w-4" />
+      <span className="text-sm">Error al cargar datos</span>
+    </div>
+  )
+}
+
 export function DashboardContent() {
   const kpisQuery = useQuery<KPIs>({
     queryKey: ["dashboard", "kpis"],
@@ -75,7 +91,11 @@ export function DashboardContent() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {kpisQuery.isLoading ? (
+        {kpisQuery.isError ? (
+          <div className="col-span-full">
+            <ErrorSection />
+          </div>
+        ) : kpisQuery.isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
         ) : kpisQuery.data ? (
           <>
@@ -106,14 +126,18 @@ export function DashboardContent() {
       {/* Map + Charts grid */}
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Colombia heatmap spans 2 columns */}
-        {mapaQuery.isLoading ? (
+        {mapaQuery.isError ? (
+          <ErrorSection />
+        ) : mapaQuery.isLoading ? (
           <MapaColombiaSkeleton />
         ) : mapaQuery.data ? (
           <MapaColombia data={mapaQuery.data} />
         ) : null}
 
         {/* Órdenes por mes */}
-        {chartsQuery.isLoading ? (
+        {chartsQuery.isError ? (
+          <ErrorSection />
+        ) : chartsQuery.isLoading ? (
           <OrdenesPorMesChartSkeleton />
         ) : chartsQuery.data ? (
           <OrdenesPorMesChart data={chartsQuery.data.ordenesPorMes} />
@@ -122,7 +146,12 @@ export function DashboardContent() {
 
       {/* Distribution + Top + Disponibilidad */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {chartsQuery.isLoading ? (
+        {chartsQuery.isError ? (
+          <>
+            <ErrorSection />
+            <ErrorSection />
+          </>
+        ) : chartsQuery.isLoading ? (
           <>
             <DistribucionServiciosChartSkeleton />
             <TopEquiposChartSkeleton />
@@ -138,7 +167,12 @@ export function DashboardContent() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {chartsQuery.isLoading ? (
+        {chartsQuery.isError ? (
+          <>
+            <ErrorSection />
+            <ErrorSection />
+          </>
+        ) : chartsQuery.isLoading ? (
           <>
             <DisponibilidadChartSkeleton />
             <OrdenesPorMesChartSkeleton />

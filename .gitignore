@@ -40,4 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# SQL dumps (too large for git)
+*.sql
+
 # Prisma - migrations are committed for deploy

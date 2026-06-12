@@ -3,13 +3,17 @@
 import * as React from "react"
 import {
   ColumnDef,
-  ColumnFiltersState,
+  GroupingState,
+  ExpandedState,
+  PaginationState,
+  RowData,
   SortingState,
   VisibilityState,
   flexRender,
   getCoreRowModel,
+  getGroupedRowModel,
+  getExpandedRowModel,
   useReactTable,
-  PaginationState,
 } from "@tanstack/react-table"
 import {
   Table,
@@ -27,29 +31,53 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, SlidersHorizontal } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  SlidersHorizontal,
+  FileDown,
+  FileSpreadsheet,
+  Layers,
+} from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { exportTableToExcel } from "@/lib/export/excel"
+import { downloadPDFTable } from "@/lib/export/pdf-table"
+import { cn } from "@/lib/utils"
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData extends RowData, TValue> {
+    /** When cell value exceeds this threshold, the row is highlighted */
+    highlightThreshold?: number
+    /** Comparison direction: gt (default), gte, lt, lte */
+    highlightDirection?: "gt" | "gte" | "lt" | "lte"
+  }
+}
 
 interface DataTableProps<TData, TValue> {
-  /** Column definitions */
   columns: ColumnDef<TData, TValue>[]
-  /** Current page rows */
   data: TData[]
-  /** Total record count (for server-side pagination) */
   total: number
-  /** Current pagination state */
   pagination: PaginationState
   onPaginationChange: (updater: PaginationState | ((prev: PaginationState) => PaginationState)) => void
-  /** Current sorting state */
   sorting?: SortingState
   onSortingChange?: (updater: SortingState | ((prev: SortingState) => SortingState)) => void
-  /** Global search value */
   globalFilter?: string
   onGlobalFilterChange?: (value: string) => void
-  /** Loading state */
   isLoading?: boolean
-  /** Unique storage key for column visibility persistence */
   storageKey?: string
+  groupable?: boolean
+  exportable?: boolean
+  exportFilename?: string
 }
 
 const PAGE_SIZES = [10, 20, 50, 100]
@@ -66,8 +94,10 @@ export function DataTable<TData, TValue>({
   onGlobalFilterChange,
   isLoading = false,
   storageKey,
+  groupable = false,
+  exportable = false,
+  exportFilename = "export",
 }: DataTableProps<TData, TValue>) {
-  // Persist column visibility in sessionStorage
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(() => {
     if (!storageKey || typeof window === "undefined") return {}
     try {
@@ -76,6 +106,9 @@ export function DataTable<TData, TValue>({
       return {}
     }
   })
+
+  const [grouping, setGrouping] = React.useState<GroupingState>([])
+  const [expanded, setExpanded] = React.useState<ExpandedState>({})
 
   function handleVisibilityChange(
     updater: VisibilityState | ((prev: VisibilityState) => VisibilityState)
@@ -96,6 +129,8 @@ export function DataTable<TData, TValue>({
       pagination,
       sorting,
       columnVisibility,
+      grouping,
+      expanded,
     },
     pageCount,
     manualPagination: true,
@@ -103,8 +138,55 @@ export function DataTable<TData, TValue>({
     onPaginationChange: onPaginationChange as React.Dispatch<React.SetStateAction<PaginationState>>,
     onSortingChange: onSortingChange as React.Dispatch<React.SetStateAction<SortingState>> | undefined,
     onColumnVisibilityChange: handleVisibilityChange as React.Dispatch<React.SetStateAction<VisibilityState>>,
+    onGroupingChange: setGrouping,
+    onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
+    ...(groupable && {
+      getGroupedRowModel: getGroupedRowModel(),
+      getExpandedRowModel: getExpandedRowModel(),
+    }),
   })
+
+  function handleExportExcel() {
+    const visColumns = table.getAllColumns().filter((col) => col.getIsVisible())
+    const colDefs = visColumns.map((col) => ({
+      header: typeof col.columnDef.header === "string" ? col.columnDef.header : col.id,
+      accessorKey: col.id,
+    }))
+    exportTableToExcel(colDefs, data as Record<string, unknown>[], exportFilename)
+  }
+
+  async function handleExportPDF() {
+    const visColumns = table.getAllColumns().filter((col) => col.getIsVisible())
+    const colHeaders = visColumns.map((col) => ({
+      header: typeof col.columnDef.header === "string" ? col.columnDef.header : col.id,
+      flex: 1,
+    }))
+    const keys = visColumns.map((col) => col.id)
+    await downloadPDFTable({
+      title: exportFilename,
+      columns: colHeaders,
+      rows: data as Record<string, unknown>[],
+      keys,
+    })
+  }
+
+  function getHighlightClass(value: unknown, meta: unknown): string {
+    if (meta == null || typeof value !== "number") return ""
+    const rec = meta as Record<string, unknown>
+    const threshold = rec.highlightThreshold as number | undefined
+    const direction = (rec.highlightDirection as string) ?? "gt"
+    if (threshold == null) return ""
+    const exceeded =
+      direction === "gt"
+        ? value > threshold
+        : direction === "gte"
+          ? value >= threshold
+          : direction === "lt"
+            ? value < threshold
+            : value <= threshold
+    return exceeded ? "bg-red-50 text-red-700 font-medium" : ""
+  }
 
   return (
     <div className="space-y-3">
@@ -118,7 +200,58 @@ export function DataTable<TData, TValue>({
             className="max-w-xs"
           />
         )}
+
         <div className="ml-auto flex items-center gap-2">
+          {groupable && (
+            <Select
+              value={grouping[0] ?? "__none__"}
+              onValueChange={(v) => setGrouping(v === "__none__" ? [] : [v])}
+            >
+              <SelectTrigger className="h-9 w-44 text-xs">
+                <Layers className="mr-1 h-3.5 w-3.5" />
+                <SelectValue placeholder="Agrupar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Sin agrupar</SelectItem>
+                {table
+                  .getAllColumns()
+                  .filter((col) => col.getCanGroup())
+                  .map((col) => (
+                    <SelectItem key={col.id} value={col.id}>
+                      {typeof col.columnDef.header === "string"
+                        ? col.columnDef.header
+                        : col.id}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {exportable && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleExportExcel}
+                disabled={isLoading || data.length === 0}
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Excel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleExportPDF}
+                disabled={isLoading || data.length === 0}
+              >
+                <FileDown className="h-4 w-4" />
+                PDF
+              </Button>
+            </>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
@@ -137,7 +270,9 @@ export function DataTable<TData, TValue>({
                     onCheckedChange={(v) => col.toggleVisibility(v)}
                     className="capitalize"
                   >
-                    {col.id}
+                    {typeof col.columnDef.header === "string"
+                      ? col.columnDef.header
+                      : col.id}
                   </DropdownMenuCheckboxItem>
                 ))}
             </DropdownMenuContent>
@@ -154,7 +289,10 @@ export function DataTable<TData, TValue>({
                 {hg.headers.map((header) => (
                   <TableHead
                     key={header.id}
-                    className={header.column.getCanSort() ? "cursor-pointer select-none" : ""}
+                    className={cn(
+                      header.column.getCanSort() && "cursor-pointer select-none",
+                      grouping.includes(header.column.id) && "bg-muted/50"
+                    )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     {header.isPlaceholder
@@ -163,8 +301,8 @@ export function DataTable<TData, TValue>({
                     {header.column.getIsSorted() === "asc"
                       ? " ↑"
                       : header.column.getIsSorted() === "desc"
-                      ? " ↓"
-                      : null}
+                        ? " ↓"
+                        : null}
                   </TableHead>
                 ))}
               </TableRow>
@@ -183,18 +321,58 @@ export function DataTable<TData, TValue>({
               ))
             ) : table.getRowModel().rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   Sin resultados.
                 </TableCell>
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+                <TableRow
+                  key={row.id}
+                  className={cn(row.getIsGrouped() && "bg-muted/50")}
+                >
+                  {row.getVisibleCells().map((cell) => {
+                    if (cell.getIsGrouped()) {
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          className="cursor-pointer font-medium"
+                          onClick={row.getToggleExpandedHandler()}
+                        >
+                          {row.getIsExpanded() ? "▼" : "▶"}{" "}
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({row.subRows.length})
+                          </span>
+                        </TableCell>
+                      )
+                    }
+                    if (cell.getIsAggregated()) {
+                      return (
+                        <TableCell key={cell.id} className="text-muted-foreground">
+                          {flexRender(
+                            cell.column.columnDef.aggregatedCell ?? cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      )
+                    }
+                    if (cell.getIsPlaceholder()) {
+                      return <TableCell key={cell.id} />
+                    }
+                    const highlightClass = getHighlightClass(
+                      cell.getValue(),
+                      cell.column.columnDef.meta
+                    )
+                    return (
+                      <TableCell key={cell.id} className={highlightClass}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               ))
             )}
@@ -207,50 +385,70 @@ export function DataTable<TData, TValue>({
         <span>
           {total} registro{total !== 1 ? "s" : ""} en total
         </span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage() || isLoading}
-            aria-label="Primera página"
+        <div className="flex items-center gap-3">
+          <Select
+            value={String(pagination.pageSize)}
+            onValueChange={(v) =>
+              onPaginationChange({ ...pagination, pageSize: Number(v), pageIndex: 0 })
+            }
           >
-            <ChevronsLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage() || isLoading}
-            aria-label="Página anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="mx-2">
-            Página {pagination.pageIndex + 1} de {pageCount || 1}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage() || isLoading}
-            aria-label="Página siguiente"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => table.setPageIndex(pageCount - 1)}
-            disabled={!table.getCanNextPage() || isLoading}
-            aria-label="Última página"
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
+            <SelectTrigger className="h-8 w-24 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZES.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size} / pág
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage() || isLoading}
+              aria-label="Primera página"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage() || isLoading}
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="mx-2 min-w-[100px] text-center">
+              Página {pagination.pageIndex + 1} de {pageCount || 1}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage() || isLoading}
+              aria-label="Página siguiente"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => table.setPageIndex(pageCount - 1)}
+              disabled={!table.getCanNextPage() || isLoading}
+              aria-label="Última página"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
