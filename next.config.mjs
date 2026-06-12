@@ -34,8 +34,10 @@ const nextConfig = {
     config.resolve.alias.encoding = false
 
     // ioredis uses Node.js built-ins (node:diagnostics_channel)
-    // that must not be bundled by webpack (applies to both server and edge)
-    config.externals.push("ioredis")
+    // that must not be bundled by webpack
+    if (isServer) {
+      config.externals.push("ioredis")
+    }
 
     return config
   },
