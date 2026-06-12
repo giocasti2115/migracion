@@ -28,18 +28,22 @@ function determinarRol(usuario: {
   return "tecnico"
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  jwt: {
-    async encode({ token }) {
-      if (!token) return ""
-      return signAccessToken(token)
+const hasRs256Keys = !!(process.env.AUTH_PRIVATE_KEY && process.env.AUTH_PUBLIC_KEY)
+
+const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
+  ...(hasRs256Keys && {
+    jwt: {
+      async encode({ token }) {
+        if (!token) return ""
+        return signAccessToken(token)
+      },
+      async decode({ token }) {
+        if (!token) return null
+        const payload = await verifyAccessToken(token)
+        return payload as Record<string, unknown> | null
+      },
     },
-    async decode({ token }) {
-      if (!token) return null
-      const payload = await verifyAccessToken(token)
-      return payload as Record<string, unknown> | null
-    },
-  },
+  }),
   providers: [
     Credentials({
       credentials: {
@@ -110,7 +114,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt", maxAge: 15 * 60 }, // 15 minutes
   pages: { signIn: "/login" },
   trustHost: true,
-})
+}
+
+const { handlers, auth, signIn, signOut } = NextAuth(nextAuthConfig)
 
 // Re-export handlers for the [...nextauth] route
 export const { GET, POST } = handlers
+export { auth, signIn, signOut }
