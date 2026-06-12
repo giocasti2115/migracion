@@ -51,7 +51,7 @@ const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
   //     const payload = await verifyFallbackToken(token)
   //     return payload
   //   },
-  // },
+//   },
   providers: [
     Credentials({
       credentials: {
@@ -61,44 +61,49 @@ const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
         lng: { type: "text" },
       },
       async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials)
-        if (!parsed.success) return null
+        try {
+          const parsed = loginSchema.safeParse(credentials)
+          if (!parsed.success) return null
 
-        const usuario = await prisma.usuario.findUnique({
-          where: { usuario: parsed.data.usuario, activo: true },
-          include: {
-            administrador: true,
-            analista: true,
-            tecnico: true,
-            coordinador: true,
-            comercial: true,
-          },
-        })
-        if (!usuario) return null
+          const usuario = await prisma.usuario.findUnique({
+            where: { usuario: parsed.data.usuario, activo: true },
+            include: {
+              administrador: true,
+              analista: true,
+              tecnico: true,
+              coordinador: true,
+              comercial: true,
+            },
+          })
+          if (!usuario) return null
 
-        const passwordOk = await compare(parsed.data.clave, usuario.clave)
-        if (!passwordOk) return null
+          const passwordOk = await compare(parsed.data.clave, usuario.clave)
+          if (!passwordOk) return null
 
-        // Requirement 1.1 — revoke all previous sessions before creating a new one
-        await revocarSesionesAnteriores(usuario.id)
+          // Requirement 1.1 — revoke all previous sessions before creating a new one
+          await revocarSesionesAnteriores(usuario.id)
 
-        const lat =
-          credentials?.lat && credentials.lat !== ""
-            ? parseFloat(credentials.lat as string)
-            : undefined
-        const lng =
-          credentials?.lng && credentials.lng !== ""
-            ? parseFloat(credentials.lng as string)
-            : undefined
+          const lat =
+            credentials?.lat && credentials.lat !== ""
+              ? parseFloat(credentials.lat as string)
+              : undefined
+          const lng =
+            credentials?.lng && credentials.lng !== ""
+              ? parseFloat(credentials.lng as string)
+              : undefined
 
-        const sesion = await crearSesion(usuario.id, lat, lng)
+          const sesion = await crearSesion(usuario.id, lat, lng)
 
-        return {
-          id: String(usuario.id),
-          name: usuario.nombre,
-          email: usuario.correo ?? undefined,
-          sessionId: sesion.id,
-          role: determinarRol(usuario),
+          return {
+            id: String(usuario.id),
+            name: usuario.nombre,
+            email: usuario.correo ?? undefined,
+            sessionId: sesion.id,
+            role: determinarRol(usuario),
+          }
+        } catch (error) {
+          console.error("[auth] authorize threw:", error)
+          return null
         }
       },
     }),
