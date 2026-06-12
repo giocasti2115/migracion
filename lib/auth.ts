@@ -4,7 +4,12 @@ import { compare } from "bcryptjs"
 import { prisma } from "./prisma"
 import { loginSchema } from "./validations/auth"
 import { crearSesion, revocarSesionesAnteriores } from "./session-manager"
-import { signAccessToken, verifyAccessToken } from "./auth-tokens"
+import {
+  signAccessToken,
+  verifyAccessToken,
+  signFallbackToken,
+  verifyFallbackToken,
+} from "./auth-tokens"
 
 export type Rol =
   | "administrador"
@@ -28,22 +33,32 @@ function determinarRol(usuario: {
   return "tecnico"
 }
 
-const hasRs256Keys = !!(process.env.AUTH_PRIVATE_KEY && process.env.AUTH_PUBLIC_KEY)
-
 const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
-  ...(hasRs256Keys && {
-    jwt: {
-      async encode({ token }) {
-        if (!token) return ""
-        return signAccessToken(token)
-      },
-      async decode({ token }) {
-        if (!token) return null
+  jwt: {
+    async encode({ token }) {
+      if (!token) return ""
+      try {
+        return await signAccessToken(token)
+      } catch (error) {
+        console.error("[auth] RS256 signing failed, using HS256 fallback:", error)
+        return signFallbackToken(token)
+      }
+    },
+    async decode({ token }) {
+      if (!token) return null
+      try {
         const payload = await verifyAccessToken(token)
         return payload as Record<string, unknown> | null
-      },
+      } catch {
+        try {
+          const payload = await verifyFallbackToken(token)
+          return payload as Record<string, unknown> | null
+        } catch {
+          return null
+        }
+      }
     },
-  }),
+  },
   providers: [
     Credentials({
       credentials: {
