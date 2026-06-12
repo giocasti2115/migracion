@@ -11,14 +11,9 @@ export async function crearSesion(
   lat?: number,
   lng?: number
 ) {
-  try {
-    return await prisma.sesion.create({
-      data: { idUsuario, activa: true, lat, lng },
-    })
-  } catch (e: any) {
-    console.error("[dbg] crearSesion failed:", e?.message)
-    throw e
-  }
+  return prisma.sesion.create({
+    data: { idUsuario, activa: true, lat, lng },
+  })
 }
 
 /**
@@ -28,21 +23,12 @@ export async function crearSesion(
  */
 export async function revocarSesionesAnteriores(idUsuario: number): Promise<void> {
   // Revoke all refresh tokens for the user first
-  try {
-    await revocarTodosRefreshTokens(idUsuario)
-  } catch (e: any) {
-    console.error("[dbg] revocarTodosRefreshTokens failed:", e?.message)
-  }
+  await revocarTodosRefreshTokens(idUsuario)
 
   // Cache revoked sessions in Redis for access token invalidation
-  let previousSessions: any[] = []
-  try {
-    previousSessions = await prisma.sesion.findMany({
-      where: { idUsuario, activa: true },
-    })
-  } catch (e: any) {
-    console.error("[dbg] findMany failed:", e?.message)
-  }
+  const previousSessions = await prisma.sesion.findMany({
+    where: { idUsuario, activa: true },
+  })
   try {
     const r = await getRedis()
     if (r) {
@@ -55,14 +41,10 @@ export async function revocarSesionesAnteriores(idUsuario: number): Promise<void
   }
 
   // Mark all active sessions as inactive
-  try {
-    await prisma.sesion.updateMany({
-      where: { idUsuario, activa: true },
-      data: { activa: false },
-    })
-  } catch (e: any) {
-    console.error("[dbg] updateMany failed:", e?.message)
-  }
+  await prisma.sesion.updateMany({
+    where: { idUsuario, activa: true },
+    data: { activa: false },
+  })
 }
 
 /**
