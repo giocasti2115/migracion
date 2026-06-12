@@ -88,11 +88,7 @@ const nextAuthConfig: Parameters<typeof NextAuth>[0] = {
         if (!passwordOk) return null
 
         // Requirement 1.1 — revoke all previous sessions before creating a new one
-        try {
-          await revocarSesionesAnteriores(usuario.id)
-        } catch (error) {
-          console.error("[auth] revocarSesionesAnteriores failed:", error)
-        }
+        await revocarSesionesAnteriores(usuario.id)
 
         const lat =
           credentials?.lat && credentials.lat !== ""

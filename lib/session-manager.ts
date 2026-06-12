@@ -29,15 +29,11 @@ export async function revocarSesionesAnteriores(idUsuario: number): Promise<void
   const previousSessions = await prisma.sesion.findMany({
     where: { idUsuario, activa: true },
   })
-  try {
-    const r = await getRedis()
-    if (r) {
-      for (const sesion of previousSessions) {
-        await r.set(`revoked-session:${sesion.id}`, "1", "EX", 86400)
-      }
+  const r = await getRedis()
+  if (r) {
+    for (const sesion of previousSessions) {
+      await r.set(`revoked-session:${sesion.id}`, "1", "EX", 86400)
     }
-  } catch (e: any) {
-    console.error("[dbg] Redis set failed:", e?.message)
   }
 
   // Mark all active sessions as inactive
