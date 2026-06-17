@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client"
+import { sanitizeUtf8Deep } from "@/lib/sanitize"
 
 /**
  * Singleton Prisma client to avoid exhausting the database connection pool
@@ -11,7 +12,7 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-export const prisma =
+const prismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
     log:
@@ -20,6 +21,14 @@ export const prisma =
         : ["error"],
   })
 
+// Auto-sanitize UTF-8 on all query results (fixes double-encoded mojibake)
+prismaClient.$use(async (params, next) => {
+  const result = await next(params)
+  return sanitizeUtf8Deep(result)
+})
+
+export const prisma = prismaClient
+
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma
+  globalForPrisma.prisma = prismaClient
 }
