@@ -16,11 +16,23 @@ export async function GET(req: NextRequest) {
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20")))
   const idEquipo = searchParams.get("idEquipo") ? parseInt(searchParams.get("idEquipo")!) : undefined
   const q = searchParams.get("q") ?? undefined
+  const activoParam = searchParams.get("activo")
+  const activo = activoParam === "true" ? true : activoParam === "false" ? false : undefined
+  const desde = searchParams.get("desde") ?? undefined
+  const hasta = searchParams.get("hasta") ?? undefined
 
   const where = {
-    activo: true,
+    ...(activo !== undefined ? { activo } : {}),
     ...(idEquipo ? { idEquipo } : {}),
     ...(q ? { title: { contains: q } } : {}),
+    ...(desde || hasta
+      ? {
+          fechaProgramada: {
+            ...(desde ? { gte: new Date(desde) } : {}),
+            ...(hasta ? { lte: new Date(hasta + "T23:59:59.999Z") } : {}),
+          },
+        }
+      : {}),
   }
 
   const [total, items] = await Promise.all([

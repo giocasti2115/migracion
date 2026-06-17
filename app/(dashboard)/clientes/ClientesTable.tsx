@@ -106,6 +106,7 @@ export function ClientesTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="clientes"
+      searchPlaceholder="Buscar por nombre de cliente…"
     />
   )
 }

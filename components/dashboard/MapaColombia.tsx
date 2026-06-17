@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   ComposableMap,
   Geographies,
@@ -7,12 +8,9 @@ import {
   ZoomableGroup,
 } from "react-simple-maps"
 import { scaleQuantile } from "d3-scale"
-import { Tooltip } from "@/components/ui/tooltip"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
-// Colombia GeoJSON — download from naturalearth or use the one in public/geo/
-// The file must exist at /public/geo/colombia-departamentos.json
 const GEO_URL = "/geo/colombia-departamentos.json"
 
 interface MapaDato {
@@ -26,6 +24,13 @@ interface MapaColombiaProps {
 }
 
 export function MapaColombia({ data }: MapaColombiaProps) {
+  const [tooltip, setTooltip] = useState<{
+    departamento: string
+    total: number
+    x: number
+    y: number
+  } | null>(null)
+
   const totals = data.map((d) => d.total)
   const colorScale = scaleQuantile<string>()
     .domain(totals)
@@ -40,7 +45,7 @@ export function MapaColombia({ data }: MapaColombiaProps) {
   const dataMap = new Map(data.map((d) => [d.codigoDane, d]))
 
   return (
-    <Card className="col-span-2">
+    <Card className="col-span-2 relative">
       <CardHeader>
         <CardTitle className="text-base">Órdenes por departamento (últimos 12 meses)</CardTitle>
       </CardHeader>
@@ -68,7 +73,24 @@ export function MapaColombia({ data }: MapaColombiaProps) {
                         hover: { fill: "#f59e0b", outline: "none", cursor: "pointer" },
                         pressed: { outline: "none" },
                       }}
-                      aria-label={dato ? `${dato.departamento}: ${dato.total} órdenes` : "Sin datos"}
+                      onMouseEnter={(e) => {
+                        if (dato) {
+                          setTooltip({
+                            departamento: dato.departamento,
+                            total: dato.total,
+                            x: e.clientX,
+                            y: e.clientY,
+                          })
+                        }
+                      }}
+                      onMouseMove={(e) => {
+                        if (tooltip) {
+                          setTooltip((prev) =>
+                            prev ? { ...prev, x: e.clientX, y: e.clientY } : prev
+                          )
+                        }
+                      }}
+                      onMouseLeave={() => setTooltip(null)}
                     />
                   )
                 })
@@ -76,7 +98,6 @@ export function MapaColombia({ data }: MapaColombiaProps) {
             </Geographies>
           </ZoomableGroup>
         </ComposableMap>
-        {/* Legend */}
         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
           <span>Menor</span>
           <div className="flex flex-1 gap-0.5">
@@ -87,6 +108,14 @@ export function MapaColombia({ data }: MapaColombiaProps) {
           <span>Mayor</span>
         </div>
       </CardContent>
+      {tooltip && (
+        <div
+          className="pointer-events-none fixed z-50 rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
+        >
+          <strong>{tooltip.departamento}</strong>: {tooltip.total} órdenes
+        </div>
+      )}
     </Card>
   )
 }

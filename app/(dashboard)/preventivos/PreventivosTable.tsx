@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table/DataTable"
@@ -69,17 +69,22 @@ export function PreventivosTable() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 })
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
+  const [filtroFecha, setFiltroFecha] = useState<{ desde: string; hasta: string } | undefined>()
+
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(pagination.pageIndex + 1),
+      pageSize: String(pagination.pageSize),
+      ...(globalFilter ? { q: globalFilter } : {}),
+    })
+    if (filtroFecha?.desde) params.set("desde", filtroFecha.desde)
+    if (filtroFecha?.hasta) params.set("hasta", filtroFecha.hasta)
+    return params.toString()
+  }, [pagination, globalFilter, filtroFecha])
 
   const { data, isLoading } = useQuery<ApiResponse>({
-    queryKey: ["preventivos", pagination, sorting, globalFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(pagination.pageIndex + 1),
-        pageSize: String(pagination.pageSize),
-        ...(globalFilter ? { q: globalFilter } : {}),
-      })
-      return fetch(`/api/preventivos?${params}`).then((r) => r.json())
-    },
+    queryKey: ["preventivos", pagination, sorting, globalFilter, filtroFecha],
+    queryFn: () => fetch(`/api/preventivos?${queryParams}`).then((r) => r.json()),
   })
 
   return (
@@ -95,6 +100,8 @@ export function PreventivosTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="preventivos"
+      searchPlaceholder="Buscar por título…"
+      dateRangeFilter={{ value: filtroFecha, onChange: setFiltroFecha }}
     />
   )
 }

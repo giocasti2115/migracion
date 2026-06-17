@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
   const idSede = searchParams.get("idSede") ? parseInt(searchParams.get("idSede")!) : undefined
   const q = searchParams.get("q") ?? undefined
   const sinOrden = searchParams.get("sinOrden") === "true"
+  const desde = searchParams.get("desde") ?? undefined
+  const hasta = searchParams.get("hasta") ?? undefined
 
   // Scope filter goes through equipo → sede
   const sedeFilter =
@@ -42,6 +44,14 @@ export async function GET(req: NextRequest) {
             { aviso: { contains: q } },
             { observacion: { contains: q } },
           ],
+        }
+      : {}),
+    ...(desde || hasta
+      ? {
+          creacion: {
+            ...(desde ? { gte: new Date(desde) } : {}),
+            ...(hasta ? { lte: new Date(hasta + "T23:59:59.999Z") } : {}),
+          },
         }
       : {}),
   }

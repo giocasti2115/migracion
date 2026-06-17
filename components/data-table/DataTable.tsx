@@ -63,6 +63,17 @@ declare module "@tanstack/react-table" {
   }
 }
 
+interface DateRangeFilter {
+  value: { desde: string; hasta: string } | undefined
+  onChange: (range: { desde: string; hasta: string } | undefined) => void
+}
+
+interface SelectFilter {
+  value: string | undefined
+  onChange: (value: string | undefined) => void
+  options: { label: string; value: string }[]
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
@@ -78,6 +89,9 @@ interface DataTableProps<TData, TValue> {
   groupable?: boolean
   exportable?: boolean
   exportFilename?: string
+  searchPlaceholder?: string
+  dateRangeFilter?: DateRangeFilter
+  statusFilter?: SelectFilter
 }
 
 const PAGE_SIZES = [10, 20, 50, 100]
@@ -97,6 +111,9 @@ export function DataTable<TData, TValue>({
   groupable = false,
   exportable = false,
   exportFilename = "export",
+  searchPlaceholder = "Buscar…",
+  dateRangeFilter,
+  statusFilter,
 }: DataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(() => {
     if (!storageKey || typeof window === "undefined") return {}
@@ -191,17 +208,68 @@ export function DataTable<TData, TValue>({
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3">
-        {onGlobalFilterChange && (
-          <Input
-            placeholder="Buscar…"
-            value={globalFilter}
-            onChange={(e) => onGlobalFilterChange(e.target.value)}
-            className="max-w-xs"
-          />
-        )}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          {onGlobalFilterChange && (
+            <Input
+              placeholder={searchPlaceholder}
+              value={globalFilter}
+              onChange={(e) => onGlobalFilterChange(e.target.value)}
+              className="max-w-xs"
+            />
+          )}
 
-        <div className="ml-auto flex items-center gap-2">
+          {dateRangeFilter && (
+            <div className="flex items-center gap-1 text-xs">
+              <input
+                type="date"
+                value={dateRangeFilter.value?.desde ?? ""}
+                onChange={(e) =>
+                  dateRangeFilter.onChange({
+                    desde: e.target.value,
+                    hasta: dateRangeFilter.value?.hasta ?? "",
+                  })
+                }
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder="Desde"
+              />
+              <span className="text-muted-foreground">—</span>
+              <input
+                type="date"
+                value={dateRangeFilter.value?.hasta ?? ""}
+                onChange={(e) =>
+                  dateRangeFilter.onChange({
+                    desde: dateRangeFilter.value?.desde ?? "",
+                    hasta: e.target.value,
+                  })
+                }
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder="Hasta"
+              />
+            </div>
+          )}
+
+          {statusFilter && (
+            <Select
+              value={statusFilter.value ?? "__all__"}
+              onValueChange={(v) => statusFilter.onChange(v === "__all__" ? undefined : v)}
+            >
+              <SelectTrigger className="h-9 w-36 text-xs">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos</SelectItem>
+                {statusFilter.options.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
           {groupable && (
             <Select
               value={grouping[0] ?? "__none__"}

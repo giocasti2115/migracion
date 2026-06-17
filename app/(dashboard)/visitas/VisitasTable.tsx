@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table/DataTable"
@@ -28,6 +28,14 @@ type Visita = {
     }
   }
 }
+
+const STATUS_OPTIONS = [
+  { label: "Pendiente", value: "1" },
+  { label: "Aprobada", value: "2" },
+  { label: "Abierta", value: "3" },
+  { label: "Cerrada", value: "4" },
+  { label: "Rechazada", value: "5" },
+]
 
 const ESTADO_VARIANT: Record<
   string,
@@ -131,16 +139,23 @@ export function VisitasTable() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 })
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
+  const [filtroFecha, setFiltroFecha] = useState<{ desde: string; hasta: string } | undefined>()
+  const [filtroEstado, setFiltroEstado] = useState<string | undefined>()
+
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(pagination.pageIndex + 1),
+      pageSize: String(pagination.pageSize),
+    })
+    if (filtroEstado) params.set("idEstado", filtroEstado)
+    if (filtroFecha?.desde) params.set("desde", filtroFecha.desde)
+    if (filtroFecha?.hasta) params.set("hasta", filtroFecha.hasta)
+    return params.toString()
+  }, [pagination, filtroEstado, filtroFecha])
 
   const { data, isLoading } = useQuery<ApiResponse>({
-    queryKey: ["visitas", pagination, sorting, globalFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(pagination.pageIndex + 1),
-        pageSize: String(pagination.pageSize),
-      })
-      return fetch(`/api/visitas?${params}`).then((r) => r.json())
-    },
+    queryKey: ["visitas", pagination, sorting, globalFilter, filtroEstado, filtroFecha],
+    queryFn: () => fetch(`/api/visitas?${queryParams}`).then((r) => r.json()),
   })
 
   return (
@@ -156,6 +171,9 @@ export function VisitasTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="visitas"
+      searchPlaceholder="Filtrar visitas…"
+      dateRangeFilter={{ value: filtroFecha, onChange: setFiltroFecha }}
+      statusFilter={{ value: filtroEstado, onChange: setFiltroEstado, options: STATUS_OPTIONS }}
     />
   )
 }

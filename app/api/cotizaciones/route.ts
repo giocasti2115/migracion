@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
   const idEstado = searchParams.get("idEstado") ? parseInt(searchParams.get("idEstado")!) : undefined
   const idCliente = searchParams.get("idCliente") ? parseInt(searchParams.get("idCliente")!) : undefined
   const q = searchParams.get("q") ?? undefined
+  const desde = searchParams.get("desde") ?? undefined
+  const hasta = searchParams.get("hasta") ?? undefined
 
   // For non-admin/analista, restrict to clients of assigned sedes
   let clienteFilter: Record<string, unknown> = {}
@@ -39,6 +41,14 @@ export async function GET(req: NextRequest) {
     ...(idEstado ? { idEstado } : {}),
     ...(idCliente ? { idCliente } : {}),
     ...(q ? { OR: [{ mensaje: { contains: q } }, { condiciones: { contains: q } }] } : {}),
+    ...(desde || hasta
+      ? {
+          creacion: {
+            ...(desde ? { gte: new Date(desde) } : {}),
+            ...(hasta ? { lte: new Date(hasta + "T23:59:59.999Z") } : {}),
+          },
+        }
+      : {}),
   }
 
   const [total, items] = await Promise.all([

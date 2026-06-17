@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table/DataTable"
@@ -26,9 +26,14 @@ type Solicitud = {
   creador: { id: number; nombre: string }
 }
 
+const STATUS_OPTIONS = [
+  { label: "Pendiente", value: "1" },
+  { label: "Aprobada", value: "2" },
+  { label: "Rechazada", value: "3" },
+]
+
 const ESTADO_VARIANT: Record<string, "default" | "secondary" | "success" | "warning" | "destructive" | "info"> = {
   Pendiente: "warning",
-  "En revisión": "info",
   Aprobada: "success",
   Rechazada: "destructive",
 }
@@ -89,17 +94,24 @@ export function SolicitudesTable() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 })
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
+  const [filtroFecha, setFiltroFecha] = useState<{ desde: string; hasta: string } | undefined>()
+  const [filtroEstado, setFiltroEstado] = useState<string | undefined>()
+
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(pagination.pageIndex + 1),
+      pageSize: String(pagination.pageSize),
+      ...(globalFilter ? { q: globalFilter } : {}),
+    })
+    if (filtroEstado) params.set("idEstado", filtroEstado)
+    if (filtroFecha?.desde) params.set("desde", filtroFecha.desde)
+    if (filtroFecha?.hasta) params.set("hasta", filtroFecha.hasta)
+    return params.toString()
+  }, [pagination, globalFilter, filtroEstado, filtroFecha])
 
   const { data, isLoading } = useQuery<ApiResponse>({
-    queryKey: ["solicitudes", pagination, sorting, globalFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(pagination.pageIndex + 1),
-        pageSize: String(pagination.pageSize),
-        ...(globalFilter ? { q: globalFilter } : {}),
-      })
-      return fetch(`/api/solicitudes?${params}`).then((r) => r.json())
-    },
+    queryKey: ["solicitudes", pagination, sorting, globalFilter, filtroEstado, filtroFecha],
+    queryFn: () => fetch(`/api/solicitudes?${queryParams}`).then((r) => r.json()),
   })
 
   return (
@@ -115,6 +127,9 @@ export function SolicitudesTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="solicitudes"
+      searchPlaceholder="Buscar por aviso u observación…"
+      dateRangeFilter={{ value: filtroFecha, onChange: setFiltroFecha }}
+      statusFilter={{ value: filtroEstado, onChange: setFiltroEstado, options: STATUS_OPTIONS }}
     />
   )
 }

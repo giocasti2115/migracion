@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
   const idEstado = searchParams.get("idEstado") ? parseInt(searchParams.get("idEstado")!) : undefined
   const idSede = searchParams.get("idSede") ? parseInt(searchParams.get("idSede")!) : undefined
   const q = searchParams.get("q") ?? undefined
+  const desde = searchParams.get("desde") ?? undefined
+  const hasta = searchParams.get("hasta") ?? undefined
 
   // Scope filter goes through solicitud → equipo → sede
   const sedeFilter =
@@ -35,6 +37,14 @@ export async function GET(req: NextRequest) {
     ...(idEstado ? { idEstado } : {}),
     ...(idSede ? { solicitud: { equipo: { idSede } } } : {}),
     ...(q ? { solicitud: { aviso: { contains: q } } } : {}),
+    ...(desde || hasta
+      ? {
+          creacion: {
+            ...(desde ? { gte: new Date(desde) } : {}),
+            ...(hasta ? { lte: new Date(hasta + "T23:59:59.999Z") } : {}),
+          },
+        }
+      : {}),
   }
 
   const [total, items] = await Promise.all([

@@ -124,6 +124,7 @@ export function EquiposTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="equipos"
+      searchPlaceholder="Buscar por serie, activo fijo, modelo, marca…"
     />
   )
 }

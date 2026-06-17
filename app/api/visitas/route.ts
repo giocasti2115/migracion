@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20")))
   const idEstado = searchParams.get("idEstado") ? parseInt(searchParams.get("idEstado")!) : undefined
   const idEjecutador = searchParams.get("idEjecutador") ? parseInt(searchParams.get("idEjecutador")!) : undefined
+  const desde = searchParams.get("desde") ?? undefined
+  const hasta = searchParams.get("hasta") ?? undefined
 
   const sedeFilter =
     sedeIds === "all"
@@ -33,6 +35,14 @@ export async function GET(req: NextRequest) {
     ...sedeFilter,
     ...(idEstado ? { idEstado } : {}),
     ...(idEjecutador ? { idEjecutador } : {}),
+    ...(desde || hasta
+      ? {
+          fechaProgramada: {
+            ...(desde ? { gte: new Date(desde) } : {}),
+            ...(hasta ? { lte: new Date(hasta + "T23:59:59.999Z") } : {}),
+          },
+        }
+      : {}),
   }
 
   const [total, items] = await Promise.all([

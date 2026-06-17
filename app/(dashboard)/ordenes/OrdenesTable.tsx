@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table/DataTable"
@@ -31,12 +31,17 @@ type Orden = {
   _count: { visitas: number }
 }
 
+const STATUS_OPTIONS = [
+  { label: "Abierta", value: "1" },
+  { label: "Cerrada", value: "2" },
+  { label: "Anulada", value: "3" },
+]
+
 const ESTADO_VARIANT: Record<
   string,
   "default" | "secondary" | "success" | "warning" | "destructive" | "info"
 > = {
   Abierta: "warning",
-  "En proceso": "info",
   Cerrada: "success",
   Anulada: "destructive",
 }
@@ -124,17 +129,24 @@ export function OrdenesTable() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 })
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
+  const [filtroFecha, setFiltroFecha] = useState<{ desde: string; hasta: string } | undefined>()
+  const [filtroEstado, setFiltroEstado] = useState<string | undefined>()
+
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(pagination.pageIndex + 1),
+      pageSize: String(pagination.pageSize),
+      ...(globalFilter ? { q: globalFilter } : {}),
+    })
+    if (filtroEstado) params.set("idEstado", filtroEstado)
+    if (filtroFecha?.desde) params.set("desde", filtroFecha.desde)
+    if (filtroFecha?.hasta) params.set("hasta", filtroFecha.hasta)
+    return params.toString()
+  }, [pagination, globalFilter, filtroEstado, filtroFecha])
 
   const { data, isLoading } = useQuery<ApiResponse>({
-    queryKey: ["ordenes", pagination, sorting, globalFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(pagination.pageIndex + 1),
-        pageSize: String(pagination.pageSize),
-        ...(globalFilter ? { q: globalFilter } : {}),
-      })
-      return fetch(`/api/ordenes?${params}`).then((r) => r.json())
-    },
+    queryKey: ["ordenes", pagination, sorting, globalFilter, filtroEstado, filtroFecha],
+    queryFn: () => fetch(`/api/ordenes?${queryParams}`).then((r) => r.json()),
   })
 
   return (
@@ -150,6 +162,9 @@ export function OrdenesTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="ordenes"
+      searchPlaceholder="Buscar por aviso de solicitud…"
+      dateRangeFilter={{ value: filtroFecha, onChange: setFiltroFecha }}
+      statusFilter={{ value: filtroEstado, onChange: setFiltroEstado, options: STATUS_OPTIONS }}
     />
   )
 }

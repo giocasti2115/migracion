@@ -115,6 +115,7 @@ export function SedesTable() {
       onGlobalFilterChange={setGlobalFilter}
       isLoading={isLoading}
       storageKey="sedes"
+      searchPlaceholder="Buscar por nombre de sede…"
     />
   )
 }
